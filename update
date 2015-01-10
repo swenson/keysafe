@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+import json
+import os
+import os.path
+import subprocess as sp
+import tempfile
+
+KEYSAFE_DIR = os.path.join(os.environ['HOME'], '.keysafe')
+CACHE_DIR = os.path.join(KEYSAFE_DIR, 'cache')
+KEY_CACHE_FILE = os.path.join(CACHE_DIR, 'keys')
+
+if not os.path.exists(CACHE_DIR):
+  os.makedirs(CACHE_DIR)
+
+if os.path.exists(KEY_CACHE_FILE):
+  with open(KEY_CACHE_FILE, 'r') as fin:
+    key_cache = json.load(fin)
+else:
+  with open(KEY_CACHE_FILE, 'w') as fout:
+    json.dump({}, fout)
+  key_cache = {}
+
+
+def get_key_nocache(user):
+  key = sp.check_output('curl -s https://keybase.io/%s/key.asc' % user, shell=True)
+  if not key.startswith("-----BEGIN PGP PUBLIC KEY BLOCK-----"):
+    raise Exception("User %s not found" % user)
+  return key
+
+def get_key(user):
+  global key_cache
+
+  if user in key_cache:
+    key, fingerprint = key_cache[user]['key'], key_cache[user]['fingerprint']
+  else:
+    key = get_key_nocache(user)
+    fname = tempfile.NamedTemporaryFile()
+    with fname as fout:
+      fout.write(key)
+      fout.flush()
+      output = sp.check_output('gpg --keyid-format LONG %s' % fname.name, shell=True)
+      fingerprint = output.split("\n")[0].split()[1].split("/")[1]
+
+    key_cache[user] = dict(key=key, fingerprint=fingerprint)
+    with open(KEY_CACHE_FILE, 'w') as fout:
+      json.dump(key_cache, fout)
+
+  return key, fingerprint
+
+def encrypt(file, users):
+  print 'Encrypting %s for users %s' % (file, ', '.join(users))
+  fingerprints = []
+  for user in users:
+    _, fingerprint = get_key(user)
+    fingerprints.append('-r')
+    fingerprints.append(fingerprint)
+  fingerprints = ' '.join(fingerprints)
+  sp.check_call('gpg --trust-model always -ea %s -o %s %s' % (fingerprints, file + '.encrypted', file), shell=True)
+
+acl = json.load(open('acl.json'))
+all_users = set()
+for _, users in acl.iteritems():
+  for user in users:
+    all_users.add(user)
+all_users = sorted(all_users)
+
+print "Importing %d users" % len(all_users)
+
+for user in all_users:
+  key, _ = get_key(user)
+  fname = tempfile.NamedTemporaryFile()
+  with fname as fout:
+    fout.write(key)
+    fout.flush()
+    sp.check_call('gpg --import %s' % fname.name, shell=True)
+
+for file, users in acl.iteritems():
+  if os.path.exists(file):
+    encrypt(file, users)
