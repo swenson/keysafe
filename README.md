@@ -5,6 +5,14 @@ bunch of different people's public keys, and keeping those files up-to-date.
 It uses the awesome service, [keybase.io](keybase.io), to fetch
 keys, although it calls `gpg` directly for increased speed.
 
+## Use cases
+
+* Shared credentials
+* Software licenses
+* API keys
+* Anything else that you want to share, securely, with multiple people
+
+
 ## How to use
 
 Clone the repo, or otherwise copy the `keysafe-update` code in particular.
