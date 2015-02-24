@@ -12,6 +12,10 @@ keys, although it calls `gpg` directly for increased speed.
 * API keys
 * Anything else that you want to share, securely, with multiple people
 
+## Requirements
+
+It should work on Linux, OS X, or any other UNIXy system.
+It needs Python, `gpg`, and `curl` installed.
 
 ## How to use
 
