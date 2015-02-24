@@ -1,9 +1,29 @@
 #!/usr/bin/env python
+
+"""
+This script reads the files specified on the command-line, i.e.,
+
+./keysafe-update acl.json
+
+pulls in public keys for all keybase users mentioned, and
+then encrypts all files with the specified keys, overwriting
+any other files.
+
+A file of "a.txt" in the ACL will be encrypted as "a.txt.encrypted".
+"""
+
 import json
 import os
 import os.path
 import subprocess as sp
+import sys
 import tempfile
+
+acls = sys.argv[1:]
+if not acls:
+  acls = ['acl.json']
+
+# setup caches
 
 KEYSAFE_DIR = os.path.join(os.environ['HOME'], '.keysafe')
 CACHE_DIR = os.path.join(KEYSAFE_DIR, 'cache')
@@ -57,23 +77,29 @@ def encrypt(file, users):
   fingerprints = ' '.join(fingerprints)
   sp.check_call('gpg --batch --yes --trust-model always -ea %s -o %s %s' % (fingerprints, file + '.encrypted', file), shell=True)
 
-acl = json.load(open('acl.json'))
-all_users = set()
-for _, users in acl.iteritems():
-  for user in users:
-    all_users.add(user)
-all_users = sorted(all_users)
 
-print "Importing %d users" % len(all_users)
+# process the ACL files specified on the command-line
 
-for user in all_users:
-  key, _ = get_key(user)
-  fname = tempfile.NamedTemporaryFile()
-  with fname as fout:
-    fout.write(key)
-    fout.flush()
-    sp.check_call('gpg --batch --import %s' % fname.name, shell=True)
+for acl_name in acls:
+  with open(acl_name) as acl_in:
+    acl = json.load(acl_in)
 
-for file, users in acl.iteritems():
-  if os.path.exists(file):
-    encrypt(file, users)
+  all_users = set()
+  for _, users in acl.iteritems():
+    for user in users:
+      all_users.add(user)
+  all_users = sorted(all_users)
+
+  print "Importing %d users" % len(all_users)
+
+  for user in all_users:
+    key, _ = get_key(user)
+    fname = tempfile.NamedTemporaryFile()
+    with fname as fout:
+      fout.write(key)
+      fout.flush()
+      sp.check_call('gpg --batch --import %s' % fname.name, shell=True)
+
+  for file, users in acl.iteritems():
+    if os.path.exists(file):
+      encrypt(file, users)
